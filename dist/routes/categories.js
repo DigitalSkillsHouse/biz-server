@@ -80,13 +80,13 @@ router.get('/', async (req, res) => {
             if (!Array.isArray(category.subcategories) || category.subcategories.length === 0) {
                 category.subcategories = DEFAULT_SUBCATEGORIES[category.slug] || [];
             }
-            res.json({ ok: true, category });
             if (noCache) {
                 res.set('Cache-Control', 'no-store, must-revalidate');
             }
             else {
                 res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
             }
+            res.json({ ok: true, category });
             return;
         }
         // Otherwise, return a list of categories (optionally filtered by q)
@@ -95,11 +95,30 @@ router.get('/', async (req, res) => {
             const regex = new RegExp(q, "i");
             filter.$or = [{ name: regex }, { slug: regex }];
         }
-        const categories = await models.categories
+        let categories = await models.categories
             .find(filter, { projection: { _id: 0, name: 1, slug: 1, count: 1, imageUrl: 1, icon: 1, subcategories: 1 } })
             .sort({ count: -1, name: 1 })
             .limit(safeLimit)
             .toArray();
+        // If no categories found, create them from existing business data
+        if (categories.length === 0) {
+            try {
+                const businessCategories = await models.businesses.distinct('category');
+                const dynamicCategories = businessCategories.map((cat) => ({
+                    name: cat,
+                    slug: toSlug(cat),
+                    count: 0,
+                    imageUrl: null,
+                    icon: '🏢',
+                    subcategories: DEFAULT_SUBCATEGORIES[toSlug(cat)] || []
+                }));
+                categories = dynamicCategories.slice(0, safeLimit);
+            }
+            catch (dbError) {
+                console.error('Error fetching business categories:', dbError);
+                categories = [];
+            }
+        }
         // Apply default subcategories if missing
         const enriched = categories.map((c) => {
             // Ensure slug exists for each category
@@ -110,13 +129,13 @@ router.get('/', async (req, res) => {
             }
             return c;
         });
-        res.json({ ok: true, categories: enriched });
         if (noCache) {
             res.set('Cache-Control', 'no-store, must-revalidate');
         }
         else {
             res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
         }
+        res.json({ ok: true, categories: enriched });
     }
     catch (error) {
         console.error("Error fetching categories:", error);

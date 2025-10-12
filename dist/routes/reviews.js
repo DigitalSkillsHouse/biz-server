@@ -77,13 +77,13 @@ router.get('/', async (req, res) => {
         const calcCount = Number(agg[0]?.count ?? 0);
         // Best-effort sync back to business document (do not block response)
         models.businesses.updateOne({ _id: business._id }, { $set: { ratingAvg: calcAvg, ratingCount: calcCount, updatedAt: new Date() } }).catch(() => { });
+        res.set("Cache-Control", "no-store");
         res.json({
             ok: true,
             reviews,
             ratingAvg: calcAvg,
             ratingCount: calcCount,
         });
-        res.set("Cache-Control", "no-store");
     }
     catch (err) {
         res.status(500).json({ ok: false, error: err?.message || "Failed to fetch reviews" });
@@ -136,8 +136,8 @@ router.post('/', async (req, res) => {
         const newCount = prevCount + 1;
         const newAvg = Number(((prevAvg * prevCount + doc.rating) / newCount).toFixed(2));
         await models.businesses.updateOne({ _id: business._id }, { $set: { ratingAvg: newAvg, ratingCount: newCount, updatedAt: new Date() } });
-        res.json({ ok: true, ratingAvg: newAvg, ratingCount: newCount });
         res.set("Cache-Control", "no-store");
+        res.json({ ok: true, ratingAvg: newAvg, ratingCount: newCount });
     }
     catch (err) {
         res.status(500).json({ ok: false, error: err?.message || "Failed to submit review" });

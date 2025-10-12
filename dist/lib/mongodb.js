@@ -17,7 +17,15 @@ exports.client = new mongodb_1.MongoClient(uri);
 let cachedDb = null;
 async function getDb() {
     if (cachedDb) {
-        return cachedDb;
+        try {
+            // Test connection
+            await cachedDb.admin().ping();
+            return cachedDb;
+        }
+        catch (error) {
+            console.log('Cached connection failed, reconnecting...');
+            cachedDb = null;
+        }
     }
     try {
         await exports.client.connect();

@@ -9,9 +9,9 @@ router.get('/', async (req, res) => {
     const base = process.env.LEOPARDS_API_BASE_URL;
     const apiKey = process.env.LEOPARDS_API_KEY;
     const apiPassword = process.env.LEOPARDS_API_PASSWORD;
-    // Optional param for future filtering (kept for compatibility with callers)
+    // Optional param for future filtering
     const provinceId = req.query.provinceId;
-    // If env vars are missing, return a safe fallback to keep UI working
+    // If env vars are missing, return a safe fallback
     if (!base || !apiKey || !apiPassword) {
         const fallback = [
             { id: "lahore", name: "Lahore" },
@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
             { id: "gujranwala", name: "Gujranwala" },
             { id: "sialkot", name: "Sialkot" },
         ];
-        // In a future version you can filter by provinceId here if needed
+        res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
         return res.json({ ok: true, cities: fallback });
     }
     try {
@@ -53,17 +53,25 @@ router.get('/', async (req, res) => {
             id: c?.id ?? c?.CityId ?? c?.city_id ?? c?.code ?? String(c?.name ?? c?.CityName ?? ""),
             name: c?.name ?? c?.CityName ?? c?.city_name ?? String(c?.id ?? c?.CityId ?? c?.city_id ?? c?.code ?? ""),
         }));
-        // Optionally filter by provinceId if your upstream supports it; currently we return all
+        // Optionally filter by provinceId if needed
         if (provinceId) {
             // No upstream filter available in this endpoint; keep all for now
-            // cities = cities.filter(() => true)
         }
-        res.json({ ok: true, cities });
-        // Cache for 1 day on CDN; allow a week stale-while-revalidate.
         res.set("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
+        res.json({ ok: true, cities });
     }
     catch (err) {
-        res.json({ ok: false, error: err?.message || "Failed to fetch cities" });
+        console.error('Cities API error:', err);
+        // Fallback on error
+        const fallback = [
+            { id: "lahore", name: "Lahore" },
+            { id: "karachi", name: "Karachi" },
+            { id: "islamabad", name: "Islamabad" },
+            { id: "rawalpindi", name: "Rawalpindi" },
+            { id: "faisalabad", name: "Faisalabad" },
+            { id: "multan", name: "Multan" },
+        ];
+        res.json({ ok: true, cities: fallback });
     }
 });
 exports.default = router;

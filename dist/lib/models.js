@@ -4,7 +4,6 @@ exports.getModels = exports.DatabaseModels = void 0;
 const mongodb_1 = require("./mongodb");
 // Database Models Class
 class DatabaseModels {
-    db;
     constructor(db) {
         this.db = db;
     }

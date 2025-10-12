@@ -52,6 +52,144 @@ async function uploadToCloudinary(buffer) {
     }
 }
 const router = express_1.default.Router();
+// GET /api/business/pending - List pending businesses (frontend submissions only)
+router.get('/pending', async (req, res) => {
+    try {
+        const models = await (0, models_1.getModels)();
+        const page = parseInt(req.query.page) || 1;
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+        const skip = (page - 1) * limit;
+        // Only show pending businesses that were submitted from frontend (not admin panel)
+        const filter = {
+            status: 'pending',
+            $and: [
+                { source: { $ne: 'admin' } },
+                { createdBy: { $exists: false } }
+            ]
+        };
+        const businesses = await models.businesses
+            .find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .toArray();
+        const total = await models.businesses.countDocuments(filter);
+        // Build CDN URLs for logos
+        const enrichedBusinesses = businesses.map((business) => ({
+            ...business,
+            logoUrl: business.logoUrl || buildCdnUrl(business.logoPublicId)
+        }));
+        res.json({
+            ok: true,
+            businesses: enrichedBusinesses,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: Math.ceil(total / limit)
+            }
+        });
+    }
+    catch (err) {
+        console.error('Error fetching pending businesses:', err);
+        res.status(500).json({ ok: false, error: err?.message || 'Failed to fetch pending businesses' });
+    }
+});
+// GET /api/business - List businesses with pagination
+router.get('/', async (req, res) => {
+    try {
+        const models = await (0, models_1.getModels)();
+        const page = parseInt(req.query.page) || 1;
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+        const skip = (page - 1) * limit;
+        const filter = { status: 'approved' };
+        // Optional filters
+        if (req.query.category) {
+            const categoryQuery = req.query.category;
+            // Handle both slug format (technology) and proper name (Technology)
+            const categoryRegex = new RegExp(`^${categoryQuery}$`, 'i');
+            filter.category = categoryRegex;
+        }
+        if (req.query.city) {
+            const cityQuery = req.query.city;
+            // Handle both slug format (karachi) and proper name (Karachi)
+            const cityRegex = new RegExp(`^${cityQuery}$`, 'i');
+            filter.city = cityRegex;
+        }
+        let businesses;
+        let total;
+        if (req.query.q) {
+            const searchTerm = req.query.q;
+            const searchRegex = new RegExp(searchTerm, 'i');
+            // Build search filter
+            const searchFilter = {
+                ...filter,
+                $or: [
+                    { name: searchRegex },
+                    { category: searchRegex },
+                    { subcategory: searchRegex },
+                    { description: searchRegex }
+                ]
+            };
+            // Use aggregation for relevance scoring
+            businesses = await models.businesses.aggregate([
+                { $match: searchFilter },
+                {
+                    $addFields: {
+                        searchScore: {
+                            $add: [
+                                // Category exact match (highest priority)
+                                { $cond: [{ $regexMatch: { input: "$category", regex: `^${searchTerm}$`, options: "i" } }, 100, 0] },
+                                // Category contains term
+                                { $cond: [{ $regexMatch: { input: "$category", regex: searchTerm, options: "i" } }, 50, 0] },
+                                // Subcategory contains term
+                                { $cond: [{ $regexMatch: { input: "$subcategory", regex: searchTerm, options: "i" } }, 40, 0] },
+                                // Name starts with term
+                                { $cond: [{ $regexMatch: { input: "$name", regex: `^${searchTerm}`, options: "i" } }, 30, 0] },
+                                // Name contains term
+                                { $cond: [{ $regexMatch: { input: "$name", regex: searchTerm, options: "i" } }, 20, 0] },
+                                // Description contains term (lowest priority)
+                                { $cond: [{ $regexMatch: { input: "$description", regex: searchTerm, options: "i" } }, 5, 0] }
+                            ]
+                        }
+                    }
+                },
+                { $sort: { searchScore: -1, createdAt: -1 } },
+                { $skip: skip },
+                { $limit: limit }
+            ]).toArray();
+            total = await models.businesses.countDocuments(searchFilter);
+        }
+        else {
+            businesses = await models.businesses
+                .find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .toArray();
+            total = await models.businesses.countDocuments(filter);
+        }
+        // Build CDN URLs for logos
+        const enrichedBusinesses = businesses.map((business) => ({
+            ...business,
+            logoUrl: business.logoUrl || buildCdnUrl(business.logoPublicId)
+        }));
+        res.json({
+            ok: true,
+            businesses: enrichedBusinesses,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: Math.ceil(total / limit)
+            }
+        });
+    }
+    catch (err) {
+        console.error('Error fetching businesses:', err);
+        res.status(500).json({ ok: false, error: err?.message || 'Failed to fetch businesses' });
+    }
+});
 // Admin: approve or reject a business
 // Auth: send header "x-admin-secret" or Bearer token matching process.env.ADMIN_SECRET
 router.patch('/', async (req, res) => {
@@ -131,7 +269,16 @@ router.post('/', upload.single('logo'), async (req, res) => {
         formData.youtubeUrl = ensureUrl(formData.youtubeUrl);
         console.log("Raw form data received:", formData);
         console.log("Form data keys:", Object.keys(formData));
-        console.log("Form data values:", Object.values(formData));
+        console.log("Description field specifically:", JSON.stringify(formData.description));
+        // Check if description contains error messages
+        if (formData.description && formData.description.includes('Business Not Found')) {
+            console.error('ERROR: Description contains error messages!');
+            return res.status(400).json({
+                ok: false,
+                error: "Invalid description content detected",
+                details: "Description field contains error messages"
+            });
+        }
         // Validate using Zod schema
         const validationResult = schemas_1.CreateBusinessSchema.safeParse(formData);
         if (!validationResult.success) {
@@ -202,6 +349,31 @@ router.post('/', upload.single('logo'), async (req, res) => {
             ok: false,
             error: err?.message || "Internal server error"
         });
+    }
+});
+// GET /api/business/:slug - Get individual business by slug (MUST be last)
+router.get('/:slug', async (req, res) => {
+    try {
+        const models = await (0, models_1.getModels)();
+        const slug = req.params.slug;
+        if (!slug) {
+            return res.status(400).json({ ok: false, error: 'Slug is required' });
+        }
+        const business = await models.businesses.findOne({ slug, status: 'approved' }, { projection: { _id: 0 } });
+        if (!business) {
+            return res.status(404).json({ ok: false, error: 'Business not found' });
+        }
+        // Build CDN URL for logo
+        const enrichedBusiness = {
+            ...business,
+            logoUrl: business.logoUrl || buildCdnUrl(business.logoPublicId)
+        };
+        res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+        res.json({ ok: true, business: enrichedBusiness });
+    }
+    catch (err) {
+        console.error('Error fetching business:', err);
+        res.status(500).json({ ok: false, error: err?.message || 'Failed to fetch business' });
     }
 });
 exports.default = router;

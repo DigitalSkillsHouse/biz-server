@@ -50,7 +50,7 @@ async function loginAndGetToken() {
 }
 async function getCourierToken() {
     const now = Date.now();
-    if (cachedToken && tokenExpiresAt - now > 60_000) {
+    if (cachedToken && tokenExpiresAt - now > 60000) {
         // still valid (>= 60s left)
         return cachedToken;
     }
