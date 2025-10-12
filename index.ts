@@ -45,10 +45,9 @@ app.get('/', (req, res) => {
   res.json({ ok: true, message: 'BizBranches API Server', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, '127.0.0.1', async () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+app.listen(PORT, async () => {
+  console.log(`Backend running on port ${PORT}`);
   
-  // Initialize default data
   try {
     const { getModels } = await import('./lib/models');
     const models = await getModels();
