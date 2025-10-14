@@ -28,6 +28,8 @@ export const BusinessSchema = z.object({
   logoUrl: z.string().url().optional().transform(val => (val === "" ? undefined : val)),
   logoPublicId: z.string().optional(),
   status: z.enum(["pending", "approved", "rejected"]).default("pending"),
+  featured: z.boolean().default(false),
+  featuredAt: z.date().optional(),
   ratingAvg: z.number().optional(),
   ratingCount: z.number().optional(),
   createdAt: z.date().default(() => new Date()),

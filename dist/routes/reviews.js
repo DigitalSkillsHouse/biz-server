@@ -86,7 +86,16 @@ router.get('/', async (req, res) => {
         });
     }
     catch (err) {
-        res.status(500).json({ ok: false, error: err?.message || "Failed to fetch reviews" });
+        console.error('Error fetching reviews:', {
+            error: err?.message || 'Unknown error',
+            stack: err?.stack,
+            businessId: req.query.businessId,
+            timestamp: new Date().toISOString()
+        });
+        res.status(500).json({
+            ok: false,
+            error: process.env.NODE_ENV === 'development' ? err?.message || 'Failed to fetch reviews' : 'Failed to fetch reviews. Please try again later.'
+        });
     }
 });
 router.post('/', async (req, res) => {
@@ -140,7 +149,16 @@ router.post('/', async (req, res) => {
         res.json({ ok: true, ratingAvg: newAvg, ratingCount: newCount });
     }
     catch (err) {
-        res.status(500).json({ ok: false, error: err?.message || "Failed to submit review" });
+        console.error('Error submitting review:', {
+            error: err?.message || 'Unknown error',
+            stack: err?.stack,
+            businessId: req.body?.businessId,
+            timestamp: new Date().toISOString()
+        });
+        res.status(500).json({
+            ok: false,
+            error: process.env.NODE_ENV === 'development' ? err?.message || 'Failed to submit review' : 'Failed to submit review. Please try again later.'
+        });
     }
 });
 exports.default = router;

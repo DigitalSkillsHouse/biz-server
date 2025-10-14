@@ -225,6 +225,74 @@ router.patch('/', async (req, res) => {
         res.status(500).json({ ok: false, error: err?.message || "Failed to update status" });
     }
 });
+// POST /api/business/check-duplicates - Check for duplicate phone or email
+router.post('/check-duplicates', async (req, res) => {
+    try {
+        console.log('Checking duplicates endpoint called');
+        const models = await (0, models_1.getModels)();
+        console.log('Database models initialized');
+        const { phone, email } = req.body || {};
+        console.log('Received request body:', { phone, email });
+        if (!phone && !email) {
+            return res.status(400).json({
+                ok: false,
+                error: "Phone number or email is required"
+            });
+        }
+        const duplicates = {
+            hasDuplicates: false
+        };
+        // Check for duplicate phone
+        if (phone) {
+            try {
+                // Remove all non-digit characters for comparison
+                const cleanPhone = phone.replace(/[^0-9]/g, '');
+                // Escape special regex characters
+                const escapedPhone = cleanPhone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const phoneExists = await models.businesses.findOne({
+                    phone: { $regex: new RegExp(escapedPhone, 'i') }
+                });
+                duplicates.phoneExists = !!phoneExists;
+                if (phoneExists) {
+                    duplicates.hasDuplicates = true;
+                }
+            }
+            catch (phoneErr) {
+                console.error("Error checking phone duplicates:", phoneErr);
+            }
+        }
+        // Check for duplicate email
+        if (email) {
+            try {
+                // Escape special regex characters in email for exact match
+                const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const emailExists = await models.businesses.findOne({
+                    email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+                });
+                duplicates.emailExists = !!emailExists;
+                if (emailExists) {
+                    duplicates.hasDuplicates = true;
+                }
+            }
+            catch (emailErr) {
+                console.error("Error checking email duplicates:", emailErr);
+            }
+        }
+        console.log('Sending response:', { duplicates, hasDuplicates: duplicates.hasDuplicates });
+        res.json({
+            ok: true,
+            duplicates,
+            hasDuplicates: duplicates.hasDuplicates
+        });
+    }
+    catch (err) {
+        console.error("Error checking duplicates:", err);
+        res.status(500).json({
+            ok: false,
+            error: err?.message || "Internal server error"
+        });
+    }
+});
 // POST /api/business - Create business with optional logo upload
 router.post('/', upload.single('logo'), async (req, res) => {
     try {
@@ -372,8 +440,16 @@ router.get('/:slug', async (req, res) => {
         res.json({ ok: true, business: enrichedBusiness });
     }
     catch (err) {
-        console.error('Error fetching business:', err);
-        res.status(500).json({ ok: false, error: err?.message || 'Failed to fetch business' });
+        console.error('Error fetching business:', {
+            error: err?.message || 'Unknown error',
+            stack: err?.stack,
+            slug: req.params.slug,
+            timestamp: new Date().toISOString()
+        });
+        res.status(500).json({
+            ok: false,
+            error: process.env.NODE_ENV === 'development' ? err?.message || 'Failed to fetch business' : 'Failed to fetch business. Please try again later.'
+        });
     }
 });
 exports.default = router;

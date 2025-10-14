@@ -30,6 +30,7 @@ class DatabaseModels {
             // Business indexes
             await this.businesses.createIndex({ category: 1, city: 1 });
             await this.businesses.createIndex({ status: 1 });
+            await this.businesses.createIndex({ featured: 1, featuredAt: -1 });
             await this.businesses.createIndex({ createdAt: -1 });
             await this.businesses.createIndex({ slug: 1 }, { unique: true, partialFilterExpression: { slug: { $exists: true } } });
             await this.businesses.createIndex({ name: "text", description: "text" });

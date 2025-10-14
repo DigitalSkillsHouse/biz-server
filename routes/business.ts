@@ -104,6 +104,30 @@ router.get('/pending', async (req, res) => {
   }
 });
 
+// GET /api/business/featured - Featured approved businesses for homepage sections
+router.get('/featured', async (req, res) => {
+  try {
+    const models = await getModels();
+    const limit = Math.min(parseInt(req.query.limit as string) || 8, 48);
+
+    const businesses = await models.businesses
+      .find({ status: 'approved', featured: true })
+      .sort({ featuredAt: -1, createdAt: -1 })
+      .limit(limit)
+      .toArray();
+
+    const enriched = businesses.map((b: any) => ({
+      ...b,
+      logoUrl: b.logoUrl || buildCdnUrl(b.logoPublicId),
+    }));
+
+    res.json({ ok: true, businesses: enriched });
+  } catch (err: any) {
+    console.error('Error fetching featured businesses:', err);
+    res.status(500).json({ ok: false, error: err?.message || 'Failed to fetch featured businesses' });
+  }
+});
+
 // GET /api/business - List businesses with pagination
 router.get('/', async (req, res) => {
   try {
@@ -248,6 +272,80 @@ router.patch('/', async (req, res) => {
     res.json({ ok: true, modifiedCount: result.modifiedCount });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err?.message || "Failed to update status" });
+  }
+});
+
+// POST /api/business/check-duplicates - Check for duplicate phone or email
+router.post('/check-duplicates', async (req, res) => {
+  try {
+    console.log('Checking duplicates endpoint called');
+    const models = await getModels();
+    console.log('Database models initialized');
+    
+    const { phone, email } = req.body || {};
+    console.log('Received request body:', { phone, email });
+    
+    if (!phone && !email) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: "Phone number or email is required" 
+      });
+    }
+    
+    const duplicates: { phoneExists?: boolean; emailExists?: boolean; hasDuplicates: boolean } = {
+      hasDuplicates: false
+    };
+    
+    // Check for duplicate phone
+    if (phone) {
+      try {
+        // Remove all non-digit characters for comparison
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        // Escape special regex characters
+        const escapedPhone = cleanPhone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const phoneExists = await models.businesses.findOne({
+          phone: { $regex: new RegExp(escapedPhone, 'i') }
+        });
+        
+        duplicates.phoneExists = !!phoneExists;
+        if (phoneExists) {
+          duplicates.hasDuplicates = true;
+        }
+      } catch (phoneErr) {
+        console.error("Error checking phone duplicates:", phoneErr);
+      }
+    }
+    
+    // Check for duplicate email
+    if (email) {
+      try {
+        // Escape special regex characters in email for exact match
+        const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const emailExists = await models.businesses.findOne({
+          email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+        });
+        
+        duplicates.emailExists = !!emailExists;
+        if (emailExists) {
+          duplicates.hasDuplicates = true;
+        }
+      } catch (emailErr) {
+        console.error("Error checking email duplicates:", emailErr);
+      }
+    }
+    
+    console.log('Sending response:', { duplicates, hasDuplicates: duplicates.hasDuplicates });
+    res.json({
+      ok: true,
+      duplicates,
+      hasDuplicates: duplicates.hasDuplicates
+    });
+  } catch (err: any) {
+    console.error("Error checking duplicates:", err);
+    res.status(500).json({ 
+      ok: false, 
+      error: err?.message || "Internal server error" 
+    });
   }
 });
 
@@ -419,8 +517,16 @@ router.get('/:slug', async (req, res) => {
     res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     res.json({ ok: true, business: enrichedBusiness });
   } catch (err: any) {
-    console.error('Error fetching business:', err);
-    res.status(500).json({ ok: false, error: err?.message || 'Failed to fetch business' });
+    console.error('Error fetching business:', {
+      error: err?.message || 'Unknown error',
+      stack: err?.stack,
+      slug: req.params.slug,
+      timestamp: new Date().toISOString()
+    });
+    res.status(500).json({ 
+      ok: false, 
+      error: process.env.NODE_ENV === 'development' ? err?.message || 'Failed to fetch business' : 'Failed to fetch business. Please try again later.'
+    });
   }
 });
 

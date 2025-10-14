@@ -23,7 +23,20 @@ console.log('MONGODB_DB in index.ts:', process.env.MONGODB_DB);
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000' }));
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:3000',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // allow non-browser tools
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+  methods: ['GET','HEAD','OPTIONS','POST','PUT','PATCH','DELETE'],
+  allowedHeaders: ['Content-Type','Authorization','x-admin-secret'],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
