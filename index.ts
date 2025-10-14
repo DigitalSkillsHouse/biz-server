@@ -22,9 +22,13 @@ console.log('MONGODB_DB in index.ts:', process.env.MONGODB_DB);
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
+const HOST = process.env.HOST || '0.0.0.0';
 
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
+  process.env.FRONTEND_URL_ALT || 'https://bizbranches.pk',
+  'https://bizbranches.pk',
+  'https://www.bizbranches.pk',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ];
@@ -58,8 +62,8 @@ app.get('/', (req, res) => {
   res.json({ ok: true, message: 'BizBranches API Server', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, async () => {
-  console.log(`Backend running on port ${PORT}`);
+app.listen(PORT, HOST, async () => {
+  console.log(`🚀 Server running at http://${HOST}:${PORT}`);
   
   try {
     const { getModels } = await import('./lib/models');
