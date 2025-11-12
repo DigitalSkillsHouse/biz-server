@@ -12,9 +12,9 @@ router.get('/', (req, res) => {
     { id: "GB", name: "Gilgit Baltistan" },
     { id: "AJK", name: "Azad Jammu & Kashmir" },
   ];
-  res.json(provinces);
   // cache for 1 day, allow week-long stale-while-revalidate
   res.set("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
+  res.json(provinces);
 });
 
 export default router;
