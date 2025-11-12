@@ -6,6 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const router = express_1.default.Router();
 router.get('/', (req, res) => {
+    // Prevent multiple responses
+    if (res.headersSent)
+        return;
     // Static provinces for Pakistan to avoid external dependency and CORS
     const provinces = [
         { id: "Punjab", name: "Punjab" },
@@ -15,8 +18,16 @@ router.get('/', (req, res) => {
         { id: "GB", name: "Gilgit Baltistan" },
         { id: "AJK", name: "Azad Jammu & Kashmir" },
     ];
-    // cache for 1 day, allow week-long stale-while-revalidate
-    res.set("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
-    res.json(provinces);
+    try {
+        // cache for 1 day, allow week-long stale-while-revalidate
+        res.set("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
+        res.json(provinces);
+    }
+    catch (error) {
+        console.error('Error in provinces route:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
 });
 exports.default = router;
