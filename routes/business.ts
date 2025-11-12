@@ -54,6 +54,28 @@ async function uploadToCloudinary(buffer: Buffer): Promise<{ url: string; public
   }
 }
 
+// Validation helper function
+async function validateUniqueBusinessName(name: string, excludeId?: string): Promise<boolean> {
+  try {
+    const models = await getModels();
+    const filter: any = { 
+      name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    };
+    
+    // Exclude current business when updating
+    if (excludeId) {
+      const { ObjectId } = require("mongodb") as typeof import("mongodb");
+      filter._id = { $ne: new ObjectId(excludeId) };
+    }
+    
+    const existing = await models.businesses.findOne(filter);
+    return !existing; // Return true if name is unique (no existing business found)
+  } catch (error) {
+    console.error('Error validating unique business name:', error);
+    return false; // Assume not unique on error for safety
+  }
+}
+
 const router = express.Router();
 
 // GET /api/business/pending - List pending businesses (frontend submissions only)

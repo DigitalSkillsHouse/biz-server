@@ -21,8 +21,8 @@ console.log('MONGODB_URI in index.ts:', process.env.MONGODB_URI ? process.env.MO
 console.log('MONGODB_DB in index.ts:', process.env.MONGODB_DB);
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3001;
-const HOST = '0.0.0.0';
+const PORT = parseInt(process.env.PORT || '3001', 10);
+const HOST = process.env.HOST || '0.0.0.0';
 
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -63,7 +63,7 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, HOST, async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server running at http://${HOST}:${PORT}`);
   
   try {
     const { getModels } = await import('./lib/models');
