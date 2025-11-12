@@ -12,6 +12,7 @@ router.get('/', (req, res) => {
     { id: "Sindh", name: "Sindh" },
     { id: "KPK", name: "Khyber Pakhtunkhwa" },
     { id: "Balochistan", name: "Balochistan" },
+    { id: "ICT", name: "Islamabad Capital Territory" },
     { id: "GB", name: "Gilgit Baltistan" },
     { id: "AJK", name: "Azad Jammu & Kashmir" },
   ];

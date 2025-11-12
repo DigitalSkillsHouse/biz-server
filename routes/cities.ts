@@ -2,28 +2,110 @@ import express from 'express';
 
 const router = express.Router();
 
+// Static cities data organized by province
+const citiesByProvince: Record<string, Array<{ id: string; name: string }>> = {
+  "Punjab": [
+    { id: "lahore", name: "Lahore" },
+    { id: "faisalabad", name: "Faisalabad" },
+    { id: "rawalpindi", name: "Rawalpindi" },
+    { id: "multan", name: "Multan" },
+    { id: "gujranwala", name: "Gujranwala" },
+    { id: "sialkot", name: "Sialkot" },
+    { id: "sargodha", name: "Sargodha" },
+    { id: "bahawalpur", name: "Bahawalpur" },
+    { id: "jhang", name: "Jhang" },
+    { id: "sheikhupura", name: "Sheikhupura" },
+    { id: "gujrat", name: "Gujrat" },
+    { id: "kasur", name: "Kasur" },
+    { id: "okara", name: "Okara" },
+    { id: "sahiwal", name: "Sahiwal" },
+    { id: "wazirabad", name: "Wazirabad" }
+  ],
+  "Sindh": [
+    { id: "karachi", name: "Karachi" },
+    { id: "hyderabad", name: "Hyderabad" },
+    { id: "sukkur", name: "Sukkur" },
+    { id: "larkana", name: "Larkana" },
+    { id: "nawabshah", name: "Nawabshah" },
+    { id: "mirpurkhas", name: "Mirpurkhas" },
+    { id: "jacobabad", name: "Jacobabad" },
+    { id: "shikarpur", name: "Shikarpur" },
+    { id: "khairpur", name: "Khairpur" },
+    { id: "dadu", name: "Dadu" }
+  ],
+  "KPK": [
+    { id: "peshawar", name: "Peshawar" },
+    { id: "mardan", name: "Mardan" },
+    { id: "mingora", name: "Mingora" },
+    { id: "kohat", name: "Kohat" },
+    { id: "dera-ismail-khan", name: "Dera Ismail Khan" },
+    { id: "bannu", name: "Bannu" },
+    { id: "swabi", name: "Swabi" },
+    { id: "charsadda", name: "Charsadda" },
+    { id: "nowshera", name: "Nowshera" },
+    { id: "abbottabad", name: "Abbottabad" }
+  ],
+  "Balochistan": [
+    { id: "quetta", name: "Quetta" },
+    { id: "turbat", name: "Turbat" },
+    { id: "gwadar", name: "Gwadar" },
+    { id: "khuzdar", name: "Khuzdar" },
+    { id: "chaman", name: "Chaman" },
+    { id: "hub", name: "Hub" },
+    { id: "sibi", name: "Sibi" },
+    { id: "zhob", name: "Zhob" },
+    { id: "loralai", name: "Loralai" }
+  ],
+  "GB": [
+    { id: "gilgit", name: "Gilgit" },
+    { id: "skardu", name: "Skardu" },
+    { id: "hunza", name: "Hunza" },
+    { id: "ghanche", name: "Ghanche" },
+    { id: "nagar", name: "Nagar" },
+    { id: "astore", name: "Astore" },
+    { id: "diamer", name: "Diamer" }
+  ],
+  "ICT": [
+    { id: "islamabad", name: "Islamabad" }
+  ],
+  "AJK": [
+    { id: "muzaffarabad", name: "Muzaffarabad" },
+    { id: "mirpur", name: "Mirpur" },
+    { id: "kotli", name: "Kotli" },
+    { id: "rawalakot", name: "Rawalakot" },
+    { id: "bhimber", name: "Bhimber" },
+    { id: "bagh", name: "Bagh" },
+    { id: "palandri", name: "Palandri" }
+  ]
+};
+
+// Get all cities as a flat array
+const getAllCities = () => {
+  const allCities: Array<{ id: string; name: string }> = [];
+  Object.values(citiesByProvince).forEach(cities => {
+    allCities.push(...cities);
+  });
+  return allCities;
+};
+
 router.get('/', async (req, res) => {
   const base = process.env.LEOPARDS_API_BASE_URL;
   const apiKey = process.env.LEOPARDS_API_KEY;
   const apiPassword = process.env.LEOPARDS_API_PASSWORD;
 
-  // Optional param for future filtering
+  // Get provinceId from query params
   const provinceId = req.query.provinceId as string;
 
-  // If env vars are missing, return a safe fallback
+  // If provinceId is provided, return cities for that province
+  if (provinceId) {
+    const cities = citiesByProvince[provinceId] || [];
+    res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+    return res.json({ ok: true, cities });
+  }
+
+  // If env vars are missing, return all cities as fallback
   if (!base || !apiKey || !apiPassword) {
-    const fallback = [
-      { id: "lahore", name: "Lahore" },
-      { id: "karachi", name: "Karachi" },
-      { id: "islamabad", name: "Islamabad" },
-      { id: "rawalpindi", name: "Rawalpindi" },
-      { id: "faisalabad", name: "Faisalabad" },
-      { id: "multan", name: "Multan" },
-      { id: "peshawar", name: "Peshawar" },
-      { id: "quetta", name: "Quetta" },
-      { id: "gujranwala", name: "Gujranwala" },
-      { id: "sialkot", name: "Sialkot" },
-    ];
+    const fallback = getAllCities();
     res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res.json({ ok: true, cities: fallback });
   }
@@ -40,11 +122,17 @@ router.get('/', async (req, res) => {
     try { data = JSON.parse(text); } catch { data = {}; }
 
     if (!response.ok) {
-      return res.json({ ok: false, error: data?.error || `Upstream error ${response.status}`, details: data, upstreamRaw: text });
+      // Fallback to static data on API error
+      const fallback = getAllCities();
+      res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+      return res.json({ ok: true, cities: fallback });
     }
 
     if (String(data?.status) !== "1" || !Array.isArray(data?.city_list)) {
-      return res.json({ ok: false, error: "Invalid response", details: data, upstreamRaw: text });
+      // Fallback to static data on invalid response
+      const fallback = getAllCities();
+      res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+      return res.json({ ok: true, cities: fallback });
     }
 
     // Normalize city_list to { id, name }
@@ -53,28 +141,15 @@ router.get('/', async (req, res) => {
       name: c?.name ?? c?.CityName ?? c?.city_name ?? String(c?.id ?? c?.CityId ?? c?.city_id ?? c?.code ?? ""),
     }));
 
-    // Optionally filter by provinceId if needed
-    if (provinceId) {
-      // No upstream filter available in this endpoint; keep all for now
-    }
-
     res.set("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
     res.json({ ok: true, cities });
   } catch (err: any) {
     console.error('Cities API error:', err);
-    // Fallback on error
-    const fallback = [
-      { id: "lahore", name: "Lahore" },
-      { id: "karachi", name: "Karachi" },
-      { id: "islamabad", name: "Islamabad" },
-      { id: "rawalpindi", name: "Rawalpindi" },
-      { id: "faisalabad", name: "Faisalabad" },
-      { id: "multan", name: "Multan" },
-    ];
+    // Fallback to static data on error
+    const fallback = getAllCities();
+    res.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     res.json({ ok: true, cities: fallback });
   }
 });
-
-
 
 export default router;
